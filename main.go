@@ -143,5 +143,8 @@ func mainWithArgs(ctx context.Context, args []string, logger golog.Logger) error
 	if err != nil {
 		return err
 	}
+	if len(queries) == 1 && queries[0].correlationID == "" {
+		logger.Warn("No query found in logs")
+	}
 	return scanner.Err()
 }
