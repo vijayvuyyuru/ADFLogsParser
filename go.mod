@@ -1,0 +1,25 @@
+module logsparser
+
+go 1.21.13
+
+require github.com/TylerBrock/colorjson v0.0.0-20200706003622-8a50f05110d2
+
+require (
+	github.com/benbjohnson/clock v1.3.5 // indirect
+	github.com/pkg/errors v0.9.1 // indirect
+	go.uber.org/atomic v1.11.0 // indirect
+	go.uber.org/goleak v1.1.12 // indirect
+	go.uber.org/multierr v1.11.0 // indirect
+	go.uber.org/zap v1.24.0 // indirect
+	golang.org/x/net v0.23.0 // indirect
+	golang.org/x/text v0.14.0 // indirect
+)
+
+require (
+	github.com/edaniels/golog v0.0.0-20230215213219-28954395e8d0
+	github.com/fatih/color v1.17.0 // indirect
+	github.com/mattn/go-colorable v0.1.13 // indirect
+	github.com/mattn/go-isatty v0.0.20 // indirect
+	go.viam.com/utils v0.1.101
+	golang.org/x/sys v0.18.0 // indirect
+)
