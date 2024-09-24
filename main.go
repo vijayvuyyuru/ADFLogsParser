@@ -9,11 +9,14 @@ import (
 	"io"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/edaniels/golog"
 	"github.com/pkg/errors"
 	"go.viam.com/utils"
 )
+
+const layout = "2006-01-02T15:04:05.000Z"
 
 var (
 	logger    = golog.NewDebugLogger("log_parsing")
@@ -28,9 +31,10 @@ type arguments struct {
 
 type queryData struct {
 	query         map[string]any
-	timeStamp     string
+	startTime     time.Time
 	correlationID string
 	files         []string
+	duration      string
 }
 
 func (q queryData) String() string {
@@ -40,7 +44,8 @@ func (q queryData) String() string {
 	sb.WriteString("query:")
 	sb.Write(bytes)
 	sb.WriteString("\n")
-	sb.WriteString(fmt.Sprintf("time: %s\n", q.timeStamp))
+	sb.WriteString(fmt.Sprintf("start time: %s\n", q.startTime))
+	sb.WriteString(fmt.Sprintf("duration: %s\n", q.duration))
 	sb.WriteString(fmt.Sprintf("correlationID: %s\n", q.correlationID))
 	sb.WriteString(fmt.Sprintf("read %d files\n", len(q.files)))
 	if listFiles {
@@ -128,16 +133,23 @@ func mainWithArgs(ctx context.Context, args []string, logger golog.Logger) error
 				return errors.New("failed to find query")
 			}
 
+			t, err := time.Parse(layout, decodedData["internalTimestamp"].(string))
+			if err != nil {
+				return err
+			}
+
 			activeQuery = queryData{
 				query:         query.(map[string]any),
-				timeStamp:     decodedData["internalTimestamp"].(string),
+				startTime:     t,
 				correlationID: id,
 			}
 		} else if strings.Contains(text, "open partition") {
 			activeQuery.files = append(activeQuery.files, decodedData["source"].(string))
+		} else if strings.Contains(text, "command execution complete") {
+			activeQuery.duration = decodedData["elapsed"].(string)
 		}
-
 	}
+	queries = append(queries, activeQuery)
 
 	err = exportToFile(queries, argsParsed.OutputPath)
 	if err != nil {
