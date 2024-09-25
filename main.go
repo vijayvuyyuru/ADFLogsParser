@@ -16,16 +16,14 @@ import (
 	"go.viam.com/utils"
 )
 
-const layout = "2006-01-02T15:04:05.000Z"
-
 var (
 	logger    = golog.NewDebugLogger("log_parsing")
 	listFiles = false
 )
 
 type arguments struct {
-	LogPath    string `flag:"log_path,usage=file path of log file can be zipped or unzipped,required=true"`
-	OutputPath string `flag:"output_path,usage=output text file,required=true"`
+	LogPath    string `flag:"log_path,usage=path of log file (optionally gzipped), default to STDIN"`
+	OutputPath string `flag:"output_path,usage=output file path, default to STDOUT"`
 	ListFiles  bool   `flag:"list_files,usage=whether to include a full list of files parsed in output,default=false"`
 }
 
@@ -58,12 +56,7 @@ func (q queryData) String() string {
 	return sb.String()
 }
 
-func exportToFile(queries []queryData, filePath string) error {
-	f, err := os.Create(filePath)
-	if err != nil {
-		return err
-	}
-	defer f.Close()
+func printReport(queries []queryData, f io.StringWriter) error {
 	for _, query := range queries {
 		if len(query.files) != 0 {
 			_, err := f.WriteString(query.String())
@@ -80,28 +73,35 @@ func main() {
 }
 
 func mainWithArgs(ctx context.Context, args []string, logger golog.Logger) error {
+	var err error
+
 	var argsParsed arguments
-	if err := utils.ParseFlags(args, &argsParsed); err != nil {
+	if err = utils.ParseFlags(args, &argsParsed); err != nil {
 		return err
 	}
 	listFiles = argsParsed.ListFiles
 
-	file, err := os.Open(argsParsed.LogPath)
-	if err != nil {
-		return err
-	}
-	defer file.Close()
+	in := (io.ReadCloser)(os.Stdin)
 
-	var reader io.Reader = file
-	if strings.Contains(argsParsed.LogPath, ".gz") {
-		gzReader, err := gzip.NewReader(file)
+	if argsParsed.LogPath != "" {
+		in, err = os.Open(argsParsed.LogPath)
+		defer utils.UncheckedErrorFunc(in.Close)
 		if err != nil {
 			return err
 		}
-		reader = gzReader
+
+		if strings.HasSuffix(argsParsed.LogPath, ".gz") {
+			gzReader, err := gzip.NewReader(in)
+			defer utils.UncheckedErrorFunc(gzReader.Close)
+			if err != nil {
+				return err
+			}
+
+			in = gzReader
+		}
 	}
 
-	scanner := bufio.NewScanner(reader)
+	scanner := bufio.NewScanner(in)
 	//make the buffer long to accomodate long strings
 	buf := make([]byte, 1_000_000)
 	scanner.Buffer(buf, 1_000_000)
@@ -133,7 +133,7 @@ func mainWithArgs(ctx context.Context, args []string, logger golog.Logger) error
 				return errors.New("failed to find query")
 			}
 
-			t, err := time.Parse(layout, decodedData["internalTimestamp"].(string))
+			t, err := time.Parse(time.RFC3339, decodedData["internalTimestamp"].(string))
 			if err != nil {
 				return err
 			}
@@ -151,10 +151,21 @@ func mainWithArgs(ctx context.Context, args []string, logger golog.Logger) error
 	}
 	queries = append(queries, activeQuery)
 
-	err = exportToFile(queries, argsParsed.OutputPath)
+	out := os.Stdout
+	if argsParsed.OutputPath != "" {
+		out, err = os.Create(argsParsed.OutputPath)
+		defer utils.UncheckedErrorFunc(out.Close)
+
+		if err != nil {
+			return err
+		}
+	}
+
+	err = printReport(queries, out)
 	if err != nil {
 		return err
 	}
+
 	if len(queries) == 1 && queries[0].correlationID == "" {
 		logger.Warn("No query found in logs")
 	}
