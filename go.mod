@@ -1,4 +1,4 @@
-module logsparser
+module github.com/vijayvuyyuru/ADFLogsParser
 
 go 1.21.13
 
